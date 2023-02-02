@@ -7,8 +7,8 @@ use self::openssl::nid::Nid;
 use self::openssl::pkcs12::Pkcs12;
 use self::openssl::pkey::{PKey, Private};
 use self::openssl::ssl::{
-    self, MidHandshakeSslStream, SslAcceptor, SslConnector, SslContextBuilder, SslMethod,
-    SslVerifyMode,
+    self, MidHandshakeSslStream, SslAcceptor, SslAcceptorBuilder, SslConnector,
+    SslConnectorBuilder, SslContextBuilder, SslMethod, SslVerifyMode,
 };
 use self::openssl::x509::{store::X509StoreBuilder, X509VerifyResult, X509};
 use std::error;
@@ -479,5 +479,98 @@ impl<S: io::Read + io::Write> io::Write for TlsStream<S> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.0.flush()
+    }
+}
+
+/// TODO docs
+pub struct NativeConnectorBuilder {
+    builder: SslConnectorBuilder,
+    use_sni: bool,
+    accept_invalid_hostnames: bool,
+    accept_invalid_certs: bool,
+}
+
+impl NativeConnectorBuilder {
+    /// Create a new NativeConnectorBuilder from the underlying native builder type.
+    pub fn new(builder: SslConnectorBuilder) -> NativeConnectorBuilder {
+        NativeConnectorBuilder {
+            builder,
+            use_sni: true,
+            accept_invalid_hostnames: false,
+            accept_invalid_certs: false,
+        }
+    }
+
+    /// Controls the use of certificate validation.
+    ///
+    /// Defaults to `false`.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before using this method. If invalid certificates are trusted, *any*
+    /// certificate for *any* site will be trusted for use. This includes expired certificates. This introduces
+    /// significant vulnerabilities, and should only be used as a last resort.
+    pub fn danger_accept_invalid_certs(
+        &mut self,
+        accept_invalid_certs: bool,
+    ) -> &mut NativeConnectorBuilder {
+        self.accept_invalid_certs = accept_invalid_certs;
+        self
+    }
+
+    /// Controls the use of Server Name Indication (SNI).
+    ///
+    /// Defaults to `true`.
+    pub fn use_sni(&mut self, use_sni: bool) -> &mut NativeConnectorBuilder {
+        self.use_sni = use_sni;
+        self
+    }
+
+    /// Controls the use of hostname verification.
+    ///
+    /// Defaults to `false`.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before using this method. If invalid hostnames are trusted, *any* valid
+    /// certificate for *any* site will be trusted for use. This introduces significant vulnerabilities, and should
+    /// only be used as a last resort.
+    pub fn danger_accept_invalid_hostnames(
+        &mut self,
+        accept_invalid_hostnames: bool,
+    ) -> &mut NativeConnectorBuilder {
+        self.accept_invalid_hostnames = accept_invalid_hostnames;
+        self
+    }
+
+    /// Creates a new `TlsConnector`.
+    pub fn build(self) -> Result<crate::TlsConnector, Error> {
+        init_trust();
+
+        let connector = TlsConnector {
+            connector: self.builder.build(),
+            use_sni: self.use_sni,
+            accept_invalid_hostnames: self.accept_invalid_hostnames,
+            accept_invalid_certs: self.accept_invalid_certs,
+        };
+
+        Ok(crate::TlsConnector(connector))
+    }
+}
+
+/// TODO docs
+pub struct NativeAcceptorBuilder {
+    builder: SslAcceptorBuilder,
+}
+
+impl NativeAcceptorBuilder {
+    /// Create a new NativeAcceptorBuilder from the underlying native builder type.
+    pub fn new(builder: SslAcceptorBuilder) -> NativeAcceptorBuilder {
+        NativeAcceptorBuilder { builder }
+    }
+
+    /// Creates a new `TlsAcceptor`.
+    pub fn build(self) -> Result<crate::TlsAcceptor, Error> {
+        Ok(crate::TlsAcceptor(TlsAcceptor(self.builder.build())))
     }
 }

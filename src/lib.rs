@@ -121,6 +121,9 @@ extern crate log;
 #[path = "imp/openssl.rs"]
 mod imp;
 
+pub use imp::NativeAcceptorBuilder;
+pub use imp::NativeConnectorBuilder;
+
 #[cfg(test)]
 mod test;
 
